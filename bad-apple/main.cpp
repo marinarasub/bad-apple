@@ -1089,12 +1089,11 @@ const BOOL gcsbi_stat = GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDL
 const int term_cols = csbi.srWindow.Right - csbi.srWindow.Left + 1;
 const int term_rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 
-// double buffered
 const size_t term_buf_size = (term_cols + 1) * term_rows + 1;
 char* term_buf1 = new char[term_buf_size];
-char* term_buf2 = new char[term_buf_size];
+//char* term_buf2 = new char[term_buf_size];
 char*& active_buf = term_buf1;
-char*& back_buf = term_buf2;
+//char*& back_buf = term_buf2;
 
 #include <windows.h>
 
@@ -1120,18 +1119,20 @@ char*& back_buf = term_buf2;
 
 int setup()
 {
+    assert(term_cols > 1);
+    assert(term_rows > 1);
     ENABLE_ANSI();
     for (int i = 0; i < term_rows; i++)
     {
         term_buf1[term_buf_size - 1] = '\0';
-        term_buf2[term_buf_size - 1] = '\0';
+        //term_buf2[term_buf_size - 1] = '\0';
     }
     return 0;
 }
 
 void swap()
 {
-    if (active_buf == term_buf1)
+   /* if (active_buf == term_buf1)
     {
         active_buf = term_buf2;
         back_buf = term_buf1;
@@ -1140,7 +1141,7 @@ void swap()
     {
         active_buf = term_buf1;
         back_buf = term_buf2;
-    }
+    }*/
 }
 
 inline char* get_term_row_ptr(char* term, int y)
@@ -1209,18 +1210,21 @@ PNG* get_png(size_t i)
 
 void clear()
 {
-    std::cout << "\x1B[2J"  << "\x1B[H" << std::flush;
+    std::cout << "\x1B[H" << std::flush;
 }
 
 void play_realtime()
 {
     PNG* pimg = nullptr;
-    size_t i = 0;
+    size_t i = 0; // which img number to use
     Timer t;
     t.start();
     constexpr size_t target_frametime = std::micro::den / 30; // n microsec
     size_t frame_time = 0;
     size_t time_acc = 0;
+    // buffer for sprintf so i can ignore '\0'
+    char* last_row_tmp = new char[term_cols];
+    // main loop
     while (pimg = get_png(i))//get_next_png())
     {
         frame_time = t.lap<size_t, std::micro>();
@@ -1241,18 +1245,25 @@ void play_realtime()
             }
             row[term_cols] = '\n';
         }
-        std::cout << get_active_buf();// << '\n';
+        // show frame info on last line
+        char* last_row = get_active_row_ptr(term_rows - 1);
+        // remove \n on last row
+        last_row[term_cols] = '\0';
+        // printf frame info into bottom left
+        size_t info_slen = snprintf(last_row_tmp, term_cols, "%zu %zums %ffps %fs", i, frame_time/1000, (double)i / t.time(), t.time());
+        memcpy(last_row, last_row_tmp, min(info_slen, term_cols-1));
+        // show
+        std::cout << get_active_buf();
         // keep at 30 fps
-        std::cout << i << " " << frame_time / 1000 << "ms " << (double)i / t.time() << "fps " << t.time() << "s" << " (real)";
-        std::cout << std::flush;
         if (frame_time < target_frametime)
         {
             std::this_thread::sleep_for(std::chrono::duration<size_t, std::micro>((target_frametime - frame_time)));
         }
-        //i++;
-        i += time_acc / target_frametime;
+        size_t di = time_acc / target_frametime;
+        i += di;
         time_acc = time_acc % target_frametime;
     }
+    delete[] last_row_tmp;
 }
 
 int main()
