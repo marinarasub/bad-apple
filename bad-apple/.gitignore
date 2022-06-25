@@ -1,0 +1,8 @@
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Ww]in32/
+[Bb]uild/
+[Oo]ut/
+render*
