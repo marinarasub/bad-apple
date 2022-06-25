@@ -1066,13 +1066,13 @@ void Timer::start()
     running = true;
 }
 
-std::string get_bad_apple_img_path(size_t n)
+std::string get_n_img_path(size_t n)
 {
     static constexpr const char* img_dir = "../img/";
-    //static constexpr size_t dir_strlen = 7;
     char img_num_str[7];
     snprintf(img_num_str, 7, "%06zu", n);
     std::string img_path;
+    // _XXXXXX.png
     img_path.reserve(7 + 1 + 6 + 4);
     img_path += img_dir;
     img_path += "_";
@@ -1091,9 +1091,7 @@ const int term_rows = csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
 
 const size_t term_buf_size = (term_cols + 1) * term_rows + 1;
 char* term_buf1 = new char[term_buf_size];
-//char* term_buf2 = new char[term_buf_size];
 char*& active_buf = term_buf1;
-//char*& back_buf = term_buf2;
 
 #include <windows.h>
 
@@ -1125,23 +1123,8 @@ int setup()
     for (int i = 0; i < term_rows; i++)
     {
         term_buf1[term_buf_size - 1] = '\0';
-        //term_buf2[term_buf_size - 1] = '\0';
     }
     return 0;
-}
-
-void swap()
-{
-   /* if (active_buf == term_buf1)
-    {
-        active_buf = term_buf2;
-        back_buf = term_buf1;
-    }
-    else
-    {
-        active_buf = term_buf1;
-        back_buf = term_buf2;
-    }*/
 }
 
 inline char* get_term_row_ptr(char* term, int y)
@@ -1159,7 +1142,7 @@ inline char* get_active_buf()
     return active_buf;
 }
 
-char select_char(const RGBAPixel& p, int x, int y)
+char select_char(const RGBAPixel& p)
 {
     const float intensity = p.intensity();
     char c = 0;
@@ -1188,23 +1171,14 @@ bool check_file_readable(std::string path)
     return rv;
 }
 
-size_t get_bad_apple_max_img_num()
-{
-    size_t i = 0;
-    while (check_file_readable(get_bad_apple_img_path(i)))
-    {
-        i++;
-    }
-    return (i == 0) ? 0 : i - 1;
-}
-
+// image load buffer
 PNG img;
 
 static int dummy_setup = setup();
 
 PNG* get_png(size_t i)
 {
-    if (!img.readFile(get_bad_apple_img_path(i))) return nullptr;
+    if (!img.readFile(get_n_img_path(i))) return nullptr;
     return &img;
 }
 
@@ -1225,12 +1199,11 @@ void play_realtime()
     // buffer for sprintf so i can ignore '\0'
     char* last_row_tmp = new char[term_cols];
     // main loop
-    while (pimg = get_png(i))//get_next_png())
+    while (pimg = get_png(i))
     {
         frame_time = t.lap<size_t, std::micro>();
         time_acc += frame_time;
         PNG& img = *pimg;
-        swap();
         clear();
         for (int y = 0; y < term_rows; y++)
         {
@@ -1240,7 +1213,7 @@ void play_realtime()
                 const int pick_x = (int)((double)x * img.width() / term_cols);
                 const int pick_y = (int)((double)y * img.height() / term_rows);
                 RGBAPixel* p = img.getRGBAPixel(pick_x, pick_y);
-                char c = select_char(*p, x, y);
+                char c = select_char(*p);
                 row[x] = c;
             }
             row[term_cols] = '\n';
@@ -1251,7 +1224,7 @@ void play_realtime()
         last_row[term_cols] = '\0';
         // printf frame info into bottom left
         size_t info_slen = snprintf(last_row_tmp, term_cols, "%zu %zums %ffps %fs", i, frame_time/1000, (double)i / t.time(), t.time());
-        memcpy(last_row, last_row_tmp, min(info_slen, term_cols-1));
+        memcpy(last_row, last_row_tmp, min(info_slen, term_cols));
         // show
         std::cout << get_active_buf();
         // keep at 30 fps
@@ -1268,7 +1241,6 @@ void play_realtime()
 
 int main()
 {
-
     AudioPlayer player;
     FLACTrack audio;
     audio.readFile("../audio/audio.flac");
